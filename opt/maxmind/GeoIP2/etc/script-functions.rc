@@ -1,0 +1,31 @@
+# maxmind geoip2 bash functions
+
+function startofscript {
+  starttime=$(date "+%s.%N")
+
+  # Absolute path to this script
+  SCRIPT_PATH=$(readlink -f "$0")
+  SCRIPT_DIR=$(dirname "${SCRIPT_PATH}")
+  SCRIPT_NAME=$(basename "${SCRIPT_PATH}")
+  SCRIPT_PID="$$"
+
+  LC_ALL="C" printf "%s %s %s[%s]: args[%s]: path[%s]: Starttime: %s\n" "$(date)" "$(hostname)" "${SCRIPT_NAME}" "${SCRIPT_PID}" "$*" "${SCRIPT_DIR}" "${starttime}"
+
+  # Open alternative fd for stdout on 3
+  exec 3>&1
+}
+
+function endofscript {
+  endtime=$(date "+%s.%N")
+
+  # Calc duration
+  dt=$(  python -c "print ${endtime} - ${starttime}" )
+  dd=$(  python -c "print int(${dt}/86400)" )
+  dt2=$( python -c "print ${dt}-86400*${dd}" )
+  dh=$(  python -c "print int(${dt2}/3600)" )
+  dt3=$( python -c "print ${dt2}-3600*${dh}" )
+  dm=$(  python -c "print int(${dt3}/60)" )
+  ds=$(  python -c "print ${dt3}-60*${dm}" )
+
+  LC_ALL="C" printf "%s %s %s[%s]: args[%s]: path[%s]: Total runtime: %d:%02d:%02d:%02.3f\n" "$(date)" "$(hostname)" "${SCRIPT_NAME}" "${SCRIPT_PID}" "$*" "${SCRIPT_DIR}" $dd $dh $dm $ds
+}

@@ -1,0 +1,204 @@
+-- We use ${hiveconf:hdfs_maxmind_dir} in the DDL statements as prefix in hdfs filesystem
+-- E.g.: beeline> set maxmind_warehouse_dir=/user/${HADOOP_USER_NAME}/opt/maxmind/GeoIP2;
+
+-- Databases
+
+-- Utils - Maxmind GeoIP
+CREATE DATABASE maxmind_geoip2_ingest  LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/internal/maxmind_geoip2_ingest.db';
+CREATE DATABASE maxmind_geoip2_staging LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/internal/maxmind_geoip2_staging.db';
+CREATE DATABASE maxmind_geoip2_dwh     LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/internal/maxmind_geoip2_dwh.db';
+
+
+-- Tables
+
+CREATE EXTERNAL TABLE maxmind_geoip2_ingest.geoip2_city_ipv4 (
+  network                        String
+, network_start_ip               String
+, network_last_ip                String
+, network_start_integer          Bigint
+, network_last_integer           Bigint
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv4 (Ingest)'
+PARTITIONED BY (pdate string)
+ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/external/maxmind_geoip2_ingest.db/geoip2_city_ipv4'
+;
+
+
+CREATE EXTERNAL TABLE maxmind_geoip2_ingest.geoip2_city_ipv6 (
+  network                        String
+, network_start_ip               String
+, network_last_ip                String
+, network_start_bigdec           String
+, network_last_bigdec            String
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv6 (Ingest)'
+PARTITIONED BY (pdate string)
+ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/external/maxmind_geoip2_ingest.db/geoip2_city_ipv6'
+;
+
+
+CREATE EXTERNAL TABLE maxmind_geoip2_ingest.geoip2_city_locations (
+  geoname_id             Int
+, locale_code            String
+, continent_code         String
+, continent_name         String
+, country_iso_code       String
+, country_name           String
+, subdivision_1_iso_code String
+, subdivision_1_name     String
+, subdivision_2_iso_code String
+, subdivision_2_name     String
+, city_name              String
+, metro_code             Int
+, time_zone              String
+)
+COMMENT 'Maxmind GeoIP2 City Map for Locations (Ingest)'
+PARTITIONED BY (`pdate` string)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+WITH SERDEPROPERTIES (
+   "separatorChar" = ",",
+   "quoteChar"     = "\"",
+   "escapeChar"    = "\\"
+)
+STORED AS TEXTFILE
+LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/external/maxmind_geoip2_ingest.db/geoip2_city_locations'
+TBLPROPERTIES ("skip.header.line.count"="1")
+;
+
+-- Needed so presto can read that damn OpenCSVSerde Table which returns falsely everthing as string
+-- Great ... presto does not support hive views ...
+CREATE VIEW maxmind_geoip2_ingest.geoip2_city_locations_v AS
+SELECT
+  cast (geoname_id AS Int)
+, locale_code
+, continent_code
+, continent_name
+, country_iso_code
+, country_name
+, subdivision_1_iso_code
+, subdivision_1_name
+, subdivision_2_iso_code
+, subdivision_2_name
+, city_name
+, cast (metro_code AS Int)
+, time_zone
+, pdate
+FROM maxmind_geoip2_ingest.geoip2_city_locations
+;
+
+
+-- Staging
+
+-- The one and only truth holder! ... smile
+-- We wants this table to be un-managed, i.e. tableType:EXTERNAL_TABLE
+-- But the data stays in the internal warehouse, since we don't use external data
+-- So when we delete a partition it should not delete the contents of the partition it points to via its table property location!
+CREATE EXTERNAL TABLE maxmind_geoip2_staging.geoip2_city_ipv6_and_4 (
+  rid                            Int
+, fam                            String
+, network_cidr                   String
+, prefix_length                  Int
+, network_start_ip               String
+, network_last_ip                String
+, network_start_hex              String
+, network_last_hex               String
+, network_start_bigdec           String -- The decimal string is up 39 digits long and DOES NOT FIT into a HIVE DECIMAL WITH 38 digits ... great type design
+, network_last_bigdec            String
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv6/4 Network Blocks (orc) - Contains linked partitions! '
+PARTITIONED BY (
+  pdate                          string
+)
+STORED AS orc
+;
+
+-- The one and only other truth holder! ... smiley
+-- We wants this table to be un-managed, i.e. tableType:EXTERNAL_TABLE
+-- But the data stays in the internal warehouse, since we don't use external data
+-- So when we delete a partition it should not delete the contents of the partition it points to via its table property location!
+CREATE EXTERNAL TABLE maxmind_geoip2_staging.geoip2_city_locations (
+  geoname_id             Int
+, locale_code            String
+, continent_code         String
+, continent_name         String
+, country_iso_code       String
+, country_name           String
+, subdivision_1_iso_code String
+, subdivision_1_name     String
+, subdivision_2_iso_code String
+, subdivision_2_name     String
+, city_name              String
+, metro_code             Int
+, time_zone              String
+)
+COMMENT 'Maxmind GeoIP2 City Map for Locations (Staging) - Contains linked partitions!'
+PARTITIONED BY (`pdate` string)
+STORED AS orc
+;
+
+
+-- Yeah ... this is the good one
+CREATE EXTERNAL TABLE maxmind_geoip2_ingest.geoip2_city_ipv6_and_4_network_ranges (
+  network_start_ip String COMMENT 'fk(maxmind_geoip2_staging.geoip2_city_ipv6[network_start_ip])'
+, network_last_ip  String
+)
+COMMENT 'CSV File with IPv6 Network Ranges (contains IPv4 mapped [::FFFF:a.b.c.d]) - Contains linked partitions!'
+PARTITIONED BY (
+  pdate         String
+)
+ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '\t'
+  LINES TERMINATED BY '\n'
+STORED AS TEXTFILE
+;
+
+-- Yeah ... this is one, too ... Hinterbandkontrolle
+-- Here we put the data from maxmind_geoip2_ingest.geoip2_city_ipv6_and_4_network_ranges
+-- into ONE data file, so it is usable for our IPv6 hive transformer
+CREATE EXTERNAL TABLE maxmind_geoip2_ingest.ipv6_ranges (
+  network_start_ip String COMMENT 'fk(maxmind_geoip2_staging.geoip2_city_ipv6[network_start_ip])'
+, network_last_ip  String
+)
+COMMENT 'CSV File with IPv6 Network Ranges (contains IPv4 mapped [::FFFF:a.b.c.d]) in ONE data file ... usable for udf-transformer --ipv6-ranges'
+PARTITIONED BY (
+  pdate         String
+)
+ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '\t'
+  LINES TERMINATED BY '\n'
+STORED AS TEXTFILE
+LOCATION '${hiveconf:hdfs_maxmind_dir}/hive/warehouse/external/maxmind_geoip2_ingest.db/ipv6_ranges'
+;

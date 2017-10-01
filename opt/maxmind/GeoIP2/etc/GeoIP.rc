@@ -1,0 +1,82 @@
+# This file is to source in by the scripts that need this configuration info
+
+# User special configuration
+
+HDFS_USER_DIR=${HDFS_USER_DIR:-/user}
+HADOOP_USER_NAME="${HADOOP_USER_NAME:-${USER}}"
+MAXMIND_USER_NAME=${MAXMIND_USER_NAME:-${HADOOP_USER_NAME}}
+HDFS_MAXMIND_DIR="hdfs://${HDFS_USER_DIR}/${MAXMIND_USER_NAME}/opt/maxmind/GeoIP2"
+MAXMIND_GEOIP2_HOME=${MAXMIND_GEOIP2_HOME:-$(dirname "${SCRIPT_DIR}")}
+MAXMIND_DOWNLOAD_DIR="${MAXMIND_GEOIP2_HOME}/var/data"
+
+# Derived Configuration
+
+# Extract Maxmind License Key from the configuration for Maxmind geoipupdate
+MAXMIND_LICENSE_KEY=$(cat "${MAXMIND_GEOIP2_HOME}"/etc/GeoIP.conf | grep -e '^LicenseKey ' | cut -d ' ' -f 2)
+
+MAXMIND_PRODUCT="GeoIP2"
+MAXMIND_CONTENT="City"
+MAXMIND_FORMAT="CSV"
+MAXMIND_EDITION_ID="${MAXMIND_PRODUCT}-${MAXMIND_CONTENT}-${MAXMIND_FORMAT}"
+MAXMIND_SUFFIX="zip"
+
+MAXMIND_OUTPUT_FILE="${MAXMIND_EDITION_ID}.${MAXMIND_SUFFIX}"
+
+MAXMIND_CSV_FILE_SUFFIX="csv"
+MAXMIND_IPV4_FILE="${MAXMIND_PRODUCT}-${MAXMIND_CONTENT}-Blocks-IPv4.${MAXMIND_CSV_FILE_SUFFIX}"
+MAXMIND_IPV4_FILE_WITH_RANGES="${MAXMIND_PRODUCT}-${MAXMIND_CONTENT}-Blocks-IPv4-with-ranges.${MAXMIND_CSV_FILE_SUFFIX}"
+MAXMIND_IPV6_FILE="${MAXMIND_PRODUCT}-${MAXMIND_CONTENT}-Blocks-IPv6.${MAXMIND_CSV_FILE_SUFFIX}"
+MAXMIND_IPV6_FILE_WITH_RANGES="${MAXMIND_PRODUCT}-${MAXMIND_CONTENT}-Blocks-IPv6-with-ranges.${MAXMIND_CSV_FILE_SUFFIX}"
+MAXMIND_LOCATIONS_FILE_PATTERN="${MAXMIND_PRODUCT}-${MAXMIND_CONTENT}-Locations-*.${MAXMIND_CSV_FILE_SUFFIX}.gz"
+MAXMIND_TIMESTAMP_FILE="${MAXMIND_EDITION_ID}.timestamp"
+
+HADOOP_HOME="${HADOOP_HOME:?is not set\!}"
+HIVE_HOME="${HIVE_HOME:?is not set\!}"
+
+HADOOP_CONF_DIR="${HADOOP_CONF_DIR:?is not set\!}"
+
+HDFS_MAXMIND_DOWNLOAD_DIR="${HDFS_MAXMIND_DIR}/var/data"
+
+HIVE_TABLE_MAXMIND_IPV4_DIRECTORY="${HDFS_MAXMIND_DIR}/hive/warehouse/external/maxmind_geoip2_ingest.db/geoip2_city_ipv4"
+
+HIVE_TABLE_MAXMIND_IPV6_DIRECTORY="${HDFS_MAXMIND_DIR}/hive/warehouse/external/maxmind_geoip2_ingest.db/geoip2_city_ipv6"
+
+HIVE_TABLE_MAXMIND_IPV6_AND_4_NETWORK_RANGES_DIRECTORY="${HDFS_MAXMIND_DIR}/hive/warehouse/internal/maxmind_geoip2_ingest.db/geoip2_city_ipv6_and_4_network_ranges"
+HIVE_TABLE_MAXMIND_IPV6_RANGES_DIRECTORY="${HDFS_MAXMIND_DIR}/hive/warehouse/external/maxmind_geoip2_ingest.db/ipv6_ranges"
+
+HIVE_TABLE_MAXMIND_LOCATIONS_DIRECTORY="${HDFS_MAXMIND_DIR}/hive/warehouse/external/maxmind_geoip2_ingest.db/geoip2_city_locations"
+
+HIVE_CONF_DIR="${HIVE_CONF_DIR:?is not set\!}"
+BEELINE_JDBC_URL="${BEELINE_JDBC_URL:?is not set\!}"
+
+PDATE="${PDATE:-$(date --iso-8601)}"
+PDATE_MINUS_1D=${PDATE_MINUS_1D:-$(date --iso-8601 -d "${PDATE} 1 day ago")}
+PDATE_SOURCE=${PDATE_SOURCE:-${PDATE_MINUS_1D}}
+PDATE_TARGET=${PDATE_TARGET:-${PDATE}}
+
+MAXMIND_DATE="${PDATE//-/}"
+
+if [ -r "${MAXMIND_DOWNLOAD_DIR}/${MAXMIND_TIMESTAMP_FILE}" ]; then
+  PDATE_TIMESTAMP=$(cat "${MAXMIND_DOWNLOAD_DIR}/${MAXMIND_TIMESTAMP_FILE}")
+else
+  PDATE_TIMESTAMP="${PDATE}"
+fi
+
+GEOIP_CSV_UPDATED="${GEOIP_CSV_UPDATED:-false}"
+
+BEELINE_CMD="${BEEINE_CMD:-${HIVE_HOME}/bin/beeline}"
+HDFS_CMD="${HDFS_CMD:-${HADOOP_HOME}/bin/hdfs}"
+
+# Exports
+
+export HADOOP_HOME
+export HIVE_HOME
+export HADOOP_CONF_DIR
+export HIVE_CONF_DIR
+
+export BEELINE_CMD
+export HDFS_CMD
+
+# Enable http proxys
+
+source "${MAXMIND_GEOIP2_BASEDIR}"/etc/proxy.rc

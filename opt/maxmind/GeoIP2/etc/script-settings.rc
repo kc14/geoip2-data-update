@@ -1,0 +1,8 @@
+# enable safe scripting
+
+# WRITING SAFE SHELL SCRIPTS
+set -eu
+set -o pipefail
+# set -o verbose
+
+shopt -s failglob

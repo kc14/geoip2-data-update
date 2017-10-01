@@ -1,0 +1,570 @@
+-- Update Locations
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=8192;
+SET mapreduce.reduce.java.opts='-Xmx6144M';
+SET mapreduce.map.memory.mb=8192;
+SET mapreduce.map.java.opts='-Xmx6144M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+SET parquet.block.size=67108864;
+
+FROM maxmind_geoip2_ingest.geoip2_city_locations
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_locations
+PARTITION (pdate)
+SELECT
+  geoname_id
+, locale_code
+, continent_code
+, continent_name
+, country_iso_code
+, country_name
+, subdivision_1_iso_code
+, subdivision_1_name
+, subdivision_2_iso_code
+, subdivision_2_name
+, city_name
+, metro_code
+, time_zone
+, pdate
+WHERE pdate = '${PDATE}'
+SORT BY geoname_id
+;
+
+-- Update geoip2_city_ipv6_and_4 staging
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=65536;
+SET mapreduce.reduce.java.opts='-Xmx49152M';
+SET mapreduce.map.memory.mb=65536;
+SET mapreduce.map.java.opts='-Xmx49152M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+SET hive.exec.compress.output=true;
+SET hive.exec.compress.intermediate=true;
+SET io.seqfile.compression.type=BLOCK; -- NONE/RECORD/BLOCK (see below);
+
+SET mapreduce.map.output.compress=true;
+SET mapreduce.map.output.compress.codec=org.apache.hadoop.io.compress.SnappyCodec;
+SET mapreduce.output.fileoutputformat.compress=true;
+SET mapreduce.output.fileoutputformat.compress.codec=org.apache.hadoop.io.compress.GzipCodec;
+SET mapreduce.output.fileoutputformat.compress.type=BLOCK;
+
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv6_and_4 PARTITION (pdate)
+SELECT
+  row_number() over ()
+, IPAll.*
+  FROM (
+    SELECT
+        TRANSFORM (
+          '4'
+        , network
+        , split(network, '/')[1]
+        , network_start_ip
+        , network_last_ip
+        , CAST(network_start_integer AS String)
+        , CAST(network_last_integer AS String)
+        , geoname_id
+        , registered_country_geoname_id
+        , represented_country_geoname_id
+        , is_anonymous_proxy
+        , is_satellite_provider
+        , postal_code
+        , latitude
+        , longitude
+        , accuracy_radius
+        , pdate
+        )
+        USING 'java -cp udf-transformer-ds9-0.0.1-SNAPSHOT-jar-with-dependencies.jar Use Basic --select 1 2 3 4 5 Basic.iphex[4] Basic.iphex[5] 6 7 8 9 10 11 12 13 14 15 16 17'
+        AS (
+          fam                            String
+        , network_cidr                   String
+        , network_prefix                 String
+        , network_start_ip               String
+        , network_last_ip                String
+        , network_start_hex              String
+        , network_last_hex               String
+        , network_start_bigdec           String
+        , network_last_bigdec            String
+        , geoname_id                     Int
+        , registered_country_geoname_id  Int
+        , represented_country_geoname_id Int
+        , is_anonymous_proxy             String
+        , is_satellite_provider          String
+        , postal_code                    String
+        , latitude                       Double
+        , longitude                      Double
+        , accuracy_radius                Int
+        , pdate                          String
+        )
+      FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+      WHERE pdate = '2017-09-19'
+        AND network <> 'network'
+    UNION ALL
+    SELECT
+        TRANSFORM (
+          '6'
+        , network
+        , split(network, '/')[1]
+        , network_start_ip
+        , network_last_ip
+        , network_start_bigdec
+        , network_last_bigdec
+        , geoname_id
+        , registered_country_geoname_id
+        , represented_country_geoname_id
+        , is_anonymous_proxy
+        , is_satellite_provider
+        , postal_code
+        , latitude
+        , longitude
+        , accuracy_radius
+        , pdate
+        )
+        USING 'java -cp udf-transformer-ds9-0.0.1-SNAPSHOT-jar-with-dependencies.jar Use Basic --select 1 2 3 4 5 Basic.iphex[4] Basic.iphex[5] 6 7 8 9 10 11 12 13 14 15 16 17'
+        AS (
+          fam                            String
+        , network_cidr                   String
+        , network_prefix                 String
+        , network_start_ip               String
+        , network_last_ip                String
+        , network_start_hex              String
+        , network_last_hex               String
+        , network_start_bigdec           String
+        , network_last_bigdec            String
+        , geoname_id                     Int
+        , registered_country_geoname_id  Int
+        , represented_country_geoname_id Int
+        , is_anonymous_proxy             String
+        , is_satellite_provider          String
+        , postal_code                    String
+        , latitude                       Double
+        , longitude                      Double
+        , accuracy_radius                Int
+        , pdate                          String
+        )
+      FROM maxmind_geoip2_ingest.geoip2_city_ipv6
+      WHERE pdate = '2017-09-19'
+) AS IPAll
+;
+
+
+-- Ridec
+
+
+-- Update IPv6 Network Ranges
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.exec.compress.output=true;
+SET hive.exec.compress.intermediate=true;
+SET io.seqfile.compression.type=BLOCK;
+
+SET mapreduce.map.output.compress=true;
+SET mapreduce.map.output.compress.codec=org.apache.hadoop.io.compress.SnappyCodec;
+SET mapreduce.output.fileoutputformat.compress=true;
+SET mapreduce.output.fileoutputformat.compress.codec=org.apache.hadoop.io.compress.GzipCodec;
+SET mapreduce.output.fileoutputformat.compress.type=BLOCK;
+
+FROM maxmind_geoip2_staging.geoip2_city_ipv6_and_4
+INSERT OVERWRITE TABLE maxmind_geoip2_ingest.geoip2_city_ipv6_network_ranges
+PARTITION (pdate)
+SELECT
+  network_start_ip
+, network_last_ip
+, pdate
+WHERE pdate = '2017-09-04'
+;
+
+
+-- Müllhalde
+
+-- Demo in presto
+
+presto> select * from maxmind_geoip2_staging.geoip2_city_ipv4 IP LEFT JOIN maxmind_geoip2_staging.geoip2_city_locations L using (pdate, geoname_id) limit 10;
+
+
+-- Since Hive & Presto can only handle equi-joins we need to convert the
+-- network range-check into an equality check. We do this by transforming
+-- the range into network prefix bitmask.
+--
+-- So the bitwise and-Operation of the IPv4 address in question and the bitmask result
+-- in the network or routing prefix which can be checked for equality to first
+-- ip address in the network.
+--
+-- The routing prefix is identical to the network_start_integer.
+
+CREATE TABLE maxmind_geoip2_staging.geoip2_city_ipv4 (
+  network_start_integer          Bigint
+, network_last_integer           Bigint
+, network_submask_integer        BigInt
+, network                        struct<
+    network_start_integer:          Bigint
+  , network_last_integer:           Bigint
+  , network_submask_integer:        BigInt
+  >
+, rid                            Int
+, network_cidr                   String
+, network_start_ip               String
+, network_last_ip                String
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv4 (Parquet)'
+STORED AS PARQUET
+TBLPROPERTIES ("parquet.compression"="SNAPPY")
+;
+
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=8192;
+SET mapreduce.reduce.java.opts='-Xmx6144M';
+SET mapreduce.map.memory.mb=8192;
+SET mapreduce.map.java.opts='-Xmx6144M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+SET parquet.block.size=67108864;
+
+FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv4
+PARTITION (pdate)
+SELECT
+  network_start_integer
+, network_last_integer
+, ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+, NAMED_STRUCT (
+    'network_start_integer',   CAST(network_start_integer AS BigInt)
+  , 'network_last_integer',    CAST(network_last_integer AS BigInt)
+  , 'network_submask_integer', ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+  )
+, row_number() over ()
+, network
+, network_start_ip
+, network_last_ip
+, geoname_id
+, registered_country_geoname_id
+, represented_country_geoname_id
+, is_anonymous_proxy
+, is_satellite_provider
+, postal_code
+, latitude
+, longitude
+, accuracy_radius
+SORT BY CAST(network_start_integer as BigInt) ASC
+;
+
+
+-- ORC nice
+
+CREATE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc (
+  rid                            Int
+, network                        struct< -- Needed for join (to have all join criteria in ONE column)
+    rid:                            Int
+  , network_start_integer:          Bigint
+  , network_last_integer:           Bigint
+  , network_submask_integer:        BigInt
+  >
+, network_cidr                   String
+, network_start_ip               String
+, network_last_ip                String
+, network_start_integer          Bigint -- Needed for sorting
+, network_last_integer           Bigint
+, network_submask_integer        BigInt
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv4 (ORC)'
+STORED AS ORC
+TBLPROPERTIES ("orc.compress"="SNAPPY")
+;
+
+-- Update staging
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=8192;
+SET mapreduce.reduce.java.opts='-Xmx6144M';
+SET mapreduce.map.memory.mb=8192;
+SET mapreduce.map.java.opts='-Xmx6144M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc
+SELECT
+  row_number() over ()
+, NAMED_STRUCT (
+    'rid',                     row_number() over ()
+  , 'network_start_integer',   CAST(network_start_integer AS BigInt)
+  , 'network_last_integer',    CAST(network_last_integer AS BigInt)
+  , 'network_submask_integer', ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+  )
+, network
+, network_start_ip
+, network_last_ip
+, network_start_integer
+, network_last_integer
+, ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+, geoname_id
+, registered_country_geoname_id
+, represented_country_geoname_id
+, is_anonymous_proxy
+, is_satellite_provider
+, postal_code
+, latitude
+, longitude
+, accuracy_radius
+SORT BY CAST(network_start_integer as BigInt) ASC
+;
+
+
+-- Not needed
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=8192;
+SET mapreduce.reduce.java.opts='-Xmx6144M';
+SET mapreduce.map.memory.mb=8192;
+SET mapreduce.map.java.opts='-Xmx6144M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc
+SELECT
+  row_number() over ()
+, NAMED_STRUCT (
+    'rid',                     row_number() over ()
+  , 'network_start_integer',   CAST(network_start_integer AS BigInt)
+  , 'network_last_integer',    CAST(network_last_integer AS BigInt)
+  , 'network_submask_integer', ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+  )
+, network
+, network_start_ip
+, network_last_ip
+, network_start_integer
+, network_last_integer
+, ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+, geoname_id
+, registered_country_geoname_id
+, represented_country_geoname_id
+, is_anonymous_proxy
+, is_satellite_provider
+, postal_code
+, latitude
+, longitude
+, accuracy_radius
+SORT BY CAST(network_start_integer as BigInt) ASC
+;
+
+
+-- ORC fail
+
+CREATE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc (
+  rid                            Int
+, network_cidr                   String
+, network_start_ip               String
+, network_last_ip                String
+, network_start_integer          Bigint
+, network_last_integer           Bigint
+, network_submask_integer        BigInt
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv4 (ORC)'
+STORED AS ORC
+TBLPROPERTIES ("orc.compress"="SNAPPY")
+;
+
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=8192;
+SET mapreduce.reduce.java.opts='-Xmx6144M';
+SET mapreduce.map.memory.mb=8192;
+SET mapreduce.map.java.opts='-Xmx6144M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc
+SELECT
+  row_number() over ()
+, network
+, network_start_ip
+, network_last_ip
+, network_start_integer
+, network_last_integer
+, ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+, geoname_id
+, registered_country_geoname_id
+, represented_country_geoname_id
+, is_anonymous_proxy
+, is_satellite_provider
+, postal_code
+, latitude
+, longitude
+, accuracy_radius
+SORT BY CAST(network_start_integer as BigInt) ASC
+;
+
+
+-- ORC first
+
+CREATE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc (
+  network_start_integer          Bigint
+, network_last_integer           Bigint
+, network_submask_integer        BigInt
+, network                        struct<
+    network_start_integer:          Bigint
+  , network_last_integer:           Bigint
+  , network_submask_integer:        BigInt
+  >
+, rid                            Int
+, network_cidr                   String
+, network_start_ip               String
+, network_last_ip                String
+, geoname_id                     Int
+, registered_country_geoname_id  Int
+, represented_country_geoname_id Int
+, is_anonymous_proxy             String
+, is_satellite_provider          String
+, postal_code                    String
+, latitude                       Double
+, longitude                      Double
+, accuracy_radius                Int
+)
+COMMENT 'Maxmind GeoIP2 City Map for IPv4 (ORC)'
+STORED AS ORC
+TBLPROPERTIES ("orc.compress"="SNAPPY")
+;
+
+
+SET mapreduce.job.reduce.slowstart.completedmaps=1.0;
+
+SET mapreduce.reduce.memory.mb=8192;
+SET mapreduce.reduce.java.opts='-Xmx6144M';
+SET mapreduce.map.memory.mb=8192;
+SET mapreduce.map.java.opts='-Xmx6144M';
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+SET hive.exec.dynamic.partition=true;
+
+SET hive.merge.mapfiles=true;
+SET hive.merge.mapredfiles=true;
+SET hive.merge.smallfiles.avgsize=134217728;
+SET hive.merge.size.per.task=268435456;
+SET mapred.max.split.size=67108864;
+SET mapred.min.split.size=67108864;
+
+FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv4_orc
+SELECT
+  network_start_integer
+, network_last_integer
+, ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+, NAMED_STRUCT (
+    'network_start_integer',   CAST(network_start_integer AS BigInt)
+  , 'network_last_integer',    CAST(network_last_integer AS BigInt)
+  , 'network_submask_integer', ~(CAST(network_start_integer AS BigInt) ^ CAST(network_last_integer AS BigInt))
+  )
+, row_number() over ()
+, network
+, network_start_ip
+, network_last_ip
+, geoname_id
+, registered_country_geoname_id
+, represented_country_geoname_id
+, is_anonymous_proxy
+, is_satellite_provider
+, postal_code
+, latitude
+, longitude
+, accuracy_radius
+SORT BY CAST(network_start_integer as BigInt) ASC
+;
+
+
+--
+
+FROM maxmind_geoip2_ingest.geoip2_city_ipv4
+INSERT OVERWRITE TABLE maxmind_geoip2_staging.geoip2_city_ipv4
+SELECT *
+ORDER BY network_start_integer ASC
+;
